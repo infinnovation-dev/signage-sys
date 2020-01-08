@@ -1,0 +1,25 @@
+#!/bin/sh
+# Copy filesystem to target (outside docker)
+
+if [ -x /usr/bin/rsync ]; then
+    rsync -av --delete \
+	  --exclude=/target \
+	  --exclude=/helpers \
+	  --exclude="/dev/*" \
+	  --exclude="/proc/*" \
+	  --exclude="/run/*" \
+	  --exclude="/sys/*" \
+	  / \
+	  /target/
+else
+    rm -fr /target/*
+    cp -ar -x -v / /target
+    rm -fr \
+       /target/target \
+       /target/helpers
+fi
+
+mydir=`dirname "$0"`
+if [ -x "$mydir/fixup-docker" ]; then
+    sh -x "$mydir/fixup-docker" /target
+fi

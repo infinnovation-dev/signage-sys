@@ -1,0 +1,165 @@
+#!/usr/bin/python3
+import sys
+import os
+import subprocess
+
+DHCP_VARS_FILE = '/run/dhcp.vars'
+
+debug = True
+myname = os.path.basename(sys.argv[0])
+
+def main():
+    reason = env('reason')
+    interface = env('interface')
+    if interface == 'lo':
+        return                    # Should not apply
+    elif interface != 'eth0':
+        return
+    dbg('reason=%s interface=%s PATH=%s' %
+        (reason, interface, env('PATH','')))
+    if reason == 'PREINIT':
+        link_up(interface)
+    elif reason in ('BOUND','RENEW','REBIND','REBOOT'):
+        # Prepare to save DHCP info into file
+        lines = []
+        for key, value in sorted(os.environ.items()):
+            if key[:4] == 'new_':
+                lines.append(key[4:] + '=' + value)
+        # Don't write vars file yet - services need network up
+
+        # Set up network
+        newip = env('new_ip_address')
+        newmask = env('new_subnet_mask','255.255.255.255')
+        newprefix = get_prefix(newip,newmask)
+
+        # dhconfig
+        oldip = env('old_ip_address')
+        if oldip  and  oldip != newip:
+            flush_dev(interface)
+
+        # Make sure interface is up
+        link_up(interface)
+
+        # 'replace; = add if it doesn't exist yet
+        lease = env('new_dhcp_lease_time', '3600') # FIXME
+        run(['/sbin/ip','-4','addr','replace',
+             '%s/%s' % (newip, newprefix),
+             'broadcast', env('new_broadcast_address',''),
+             'dev',interface,
+             'valid_lft',lease,
+             'preferred_lft',lease])
+        # Add routes
+        newrouters = env('new_routers','')
+        if newrouters:
+            for metric, router in enumerate(newrouters.split()):
+                run(['/sbin/ip','-4','route','replace',
+                     'default',
+                     'via',router,
+                     'dev',interface,
+                     'metric',str(metric)])
+
+        # Set hostname
+        newhost = env('new_host_name')
+        if newhost is not None:
+            run(['hostname', newhost])
+
+        # Set up DNS
+        domain = env('new_domain_name')
+        search = env('new_domain_search')
+        dns_servers = env('new_domain_name_servers','').split()
+        setup_resolv_conf(domain, search, dns_servers)
+
+        # Network is now configured
+        write_lines(DHCP_VARS_FILE, lines)
+
+        # NTP servers
+        ntpservers = env('new_ntp_servers')
+        if ntpservers:
+            setup_ntp(ntpservers.split())
+
+def link_up(interface):
+    """Bring interface up"""
+    run(['/sbin/ip','link','set','dev',interface,'up'])
+
+def flush_dev(interface):
+    """Flush device"""
+    run(['/sbin/ip','-4','addr','flush','dev',interface])
+    run(['/sbin/ip','-4','route','flush','dev',interface])
+    run(['/sbin/ip','-4','neigh','flush','dev',interface])
+
+def setup_resolv_conf(domain, search, servers):
+    """Set up resolver configuration"""
+    lines = []
+    lines.append('# Written by %s' % myname)
+    if domain:
+        lines.append('domain %s' % domain)
+    if search:
+        lines.append('search %s' % search)
+    for server in servers:
+        lines.append('nameserver %s' % server)
+
+    write_lines('/run/resolv.conf', lines)
+
+def setup_ntp(servers):
+    """Set up NTP"""
+    if False:
+        # For chrony, if used
+        lines = ('# Written by %s' % myname,
+                 #'driftfile /var/lib/chrony.drift',
+                 #'logdir /var/log/chrony',
+                 'makestep 1.0 3',
+                 'rtcsync')
+        write_lines('/run/chrony.conf', lines)
+    else:
+        # For systemd-timesyncd
+        confdir = '/run/systemd/timesyncd.conf.d'
+        if not os.path.exists(confdir):
+            os.makedirs(confdir)
+        lines = ('# Written by %s' % myname,
+                 '[Time]',
+                 'NTP=%s' % (' '.join(servers))) # OK if empty list
+        write_lines(confdir + '/dhcp-ntp.conf', lines)
+        run(['systemctl','try-reload-or-restart','systemd-timesyncd'])
+        #run(['/bin/systemctl','restart','systemd-timesyncd.service'])
+
+def get_prefix(ip,nm):
+    """Get number of prefix bits"""
+    b3, b2, b1, b0 = [int(x) for x in nm.split('.')]
+    b = ((b3 * 256 + b2) * 256 + b1) * 256 + b0
+    ones,_,_ = format(b, '032b').partition('0')
+    return len(ones)
+
+#-----------------------------------------------------------------------
+#       Helpers
+#-----------------------------------------------------------------------
+def run(cmd):
+    dbg(' '.join(cmd))
+    subprocess.check_call(cmd)
+
+def env(var, default=None):
+    return os.environ.get(var, default)
+
+def write_lines(filename, lines, mode=None, owner=None):
+    newname = filename + '.new'
+    with open(newname, 'w') as f:
+        if mode is not None:
+            os.chmod(newname, mode)
+        for line in lines:
+            print(line, file=f)
+    if owner is not None:
+        import pwd
+        pw = pwd.getpwnam(owner)
+        os.chown(newname, pw.pw_uid, pw.pw_gid)
+    os.rename(newname, filename)
+    dbg('wrote: %s' % filename)
+
+def dbg(text):
+    klog(text)
+    if debug:
+        print(text, file=sys.stderr)
+
+def klog(text):
+    with open('/dev/kmsg','w') as k:
+        print('%s: %s' % (myname, text), file=k)
+
+main()

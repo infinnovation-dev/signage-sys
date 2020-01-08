@@ -1,0 +1,164 @@
+#!/usr/bin/perl
+#=======================================================================
+# Manipulate file systems which are usually read-only
+# Copyright (C) 2014-2017  Infinnovation Ltd <piwall@infinnovation.co.uk>
+#=======================================================================
+use strict;
+use Getopt::Long;
+Getopt::Long::Configure('bundling');
+Getopt::Long::Configure('require_order'); # Ignore options of 'piro do' command
+
+my %mountpoint = (root => '/',
+		  boot => '/boot');
+
+(my $myname = $0) =~ s!.*/!!;
+
+sub main {
+    sub usage {
+	print STDERR "Usage: $myname [-b|-r] method [arg...]\n";
+	exit 2;
+    };
+    my %dev;
+    GetOptions('r|root' => \$dev{root},
+	       'b|boot' => \$dev{boot})
+	or usage;
+    $dev{root} = 1 unless grep {$_} values %dev; # If none explicit, use root
+    usage unless @ARGV;
+    my $method = shift @ARGV;
+    if ($method eq 'do') {
+	die "$myname do: no command given\n"
+	    unless @ARGV;
+	with_rw(\%dev, @ARGV);
+    } else {
+	die "$myname $method: unexpected argument(s)\n"
+	    if @ARGV;
+	if ($method eq 'show') {
+	    show(\%dev);
+	} elsif ($method eq 'lock') {
+	    set_ro(\%dev);
+	} elsif ($method eq 'unlock') {
+	    set_rw(\%dev);
+	} elsif ($method eq 'check-locked') {
+	    ro_check(\%dev);
+	} elsif ($method eq 'check-unlocked') {
+	    rw_check(\%dev);
+	} else {
+	    die "$myname: unknown method '$method': must be ".
+		"show, lock, unlock, check-locked, check-unlocked or do\n";
+	}
+    }
+}
+
+# Show status of filesystem(s)
+sub show {
+    my $dev = shift;
+    while (my($fs,$mtpt) = each %mountpoint) {
+	if ($dev->{$fs}) {
+	    my $rx = _writable($mtpt) ? 'rw' : 'ro';
+	    print "$fs\t$mtpt\t$rx\n";
+	}
+    }
+}
+
+# Check that the filesystem(s) are writable
+sub rw_check {
+    my $dev = shift;
+    my $ok = 1;
+    while (my($fs,$mtpt) = each %mountpoint) {
+	if ($dev->{$fs}) {
+	    if (! _writable($mtpt)) {
+		print STDERR "$fs file system ($mtpt) is not writable\n";
+		$ok = 0;
+	    }
+	}
+    }
+    exit 1 unless $ok;
+}
+
+# Check that the filesystem(s) are readonly
+sub ro_check {
+    my $dev = shift;
+    my $ok = 1;
+    while (my($fs,$mtpt) = each %mountpoint) {
+	if ($dev->{$fs}) {
+	    if (_writable($mtpt)) {
+		print STDERR "$fs file system ($mtpt) is writable\n";
+		$ok = 0;
+	    }
+	}
+    }
+    exit 1 unless $ok;
+}
+
+# Set the specified filesystem(s) writable
+sub set_rw {
+    my $dev = shift;
+    _must_be_root();
+    while (my($fs,$on) = each %$dev) {
+	if ($on) {
+	    cmd('mount','-o','remount,rw', $mountpoint{$fs});
+	}
+    }
+}
+
+# Set the specified filesystem(s) readonly
+sub set_ro {
+    my $dev = shift;
+    _must_be_root();
+    if ($dev->{root} &&
+	-x '/sbin/fake-hwclock' &&
+	_writable($mountpoint{root})) {
+	# Ensure clock on next boot is ahead of any file changes
+	cmd('fake-hwclock','save');
+    }
+    cmd('sync');
+    while (my($fs,$on) = each %$dev) {
+	if ($on) {
+	    cmd('mount','-o','remount,ro', $mountpoint{$fs});
+	}
+    }
+}
+
+# Execute a command with specified filesystem(s) writable
+sub with_rw {
+    my $dev = shift;
+    #print join(" ",%$dev),"\n";
+    _must_be_root();
+    my @rodev = grep {! _writable($_)} values %mountpoint;
+    print join(" ",'unlock',@rodev),"\n";
+    $::SIG{INT} = $::SIG{TERM} = sub {map {set_ro($_)} @rodev};
+    map {set_rw($_)} @rodev;
+    # my $rc = cmd(@_);
+    my $rc = system(@_);
+    map {set_ro($_)} @rodev;
+    exit($rc);
+}
+
+sub _must_be_root {
+    die "$myname: must be root\n"
+	unless $> == 0;
+}
+
+sub _writable {
+    my $mp = shift;
+    my $rw;
+    open(MOUNTS,'<','/proc/mounts')
+	or die "$myname: cannot open /proc/mounts: $!\n";
+    while (<MOUNTS>) {
+	my($dev,$mtpt,$fstype,$opts,@rest) = split;
+	if ($mtpt eq $mp && $dev ne 'rootfs') {
+	    $rw= ($opts =~ /^rw\b/);
+	}	    
+    }
+    close(MOUNTS);
+    return $rw;
+}
+
+sub cmd {
+    #print 'cmd> ',join(" ", @_),"\n";
+    #return 0;
+    my $rc = system(@_);
+    return $rc;
+}
+
+main;

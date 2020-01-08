@@ -1,0 +1,32 @@
+APT_PROXY: http://192.168.3.18:3142
+user:
+  name: pi
+  cryptpw: $6$00wS7lAT$QSAwv413y3ZFok4sPwJpuwbzTZf.DJU.fAd7NlJ5uDKSo9wsikMWMmf/yLsNj7kE/W593ZunBAb0QzfsF/s5a.
+  authkeys:
+    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDw7gBh3n/+gaQCCuZNdiTfP0kj8nQvTBSbVFAsxPba4o4EZHcvmCkhTO7RYHKTAYAjBBlH/iAD0054JMJd6lPTresGdYokFHTQhnanC39o2eA4+rFhm2jLCHP3Rd7KyFVfRVh45s3WY26fdgwhBDvNUZ88I/sXHbdmeFeT2IjptHFtMwQh4yRxQFnNGGIurpNKA8c+70aXIZbKCQF4WQxD1UY7bRFnmQ6HW5Bp3HVk3PeQ+vXBa2n1Pn5c6nL9aAO/7UXXP4vN6T1j951w/AT0utj33yMRJ3u7SkumSY0kYC+wBrliw2i4irDOmOyeZaF/HXK+c4D8WqwkeR30iQln colin@piwall.co.uk
+    - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEAw8Jt5xdaKWRbrfYeK75zBXTriZbriExRkxM4AdZR6Xg+VqyipiBUNxNKnKVfAE6rxKT0z1oInFplnTbTpwZNHIGGjJvB30YWkdXD+nxoBi0Psto3nNTg+IUAHxcUaL1xgIjDrwKr60t7sL1NI4JEvojDAgYCHj7iBEhbTH8o49U= agood@gen-on-21
+    - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA7H0YZKJObt0HlkJ5mpGFaB9avmmlP+Hq9d57Z9v27SZvbMsPj8rlHFbGGbfk8OlctbRUb3n0ZT4PcwM8Fq8AUi8+gbD6qduxPh2EDNJYiSGwghtIlX5IFyemE1m6SU0hNYRkOnZU1yhJWHHGkjLs4jXEdTJkrDI8iRnYpKjVUhk= chah@gen-on-13
+swap:
+  mode: dphys
+  size: 100M
+#wifi:
+#  ssid: ptwl
+#  psk: ...
+path:
+  sbin: true
+  # games: 
+data:
+  dev: local
+resize:
+  size: full
+#readonly: root-ro
+readonly: piro
+python:
+  version: python3
+config:
+  - "# Pi3B+ ethernet negotiation with CCFE network is flaky"
+  - dtparam=eee=off
+  - dtparam=eth_max_speed=100
+mail:
+  mta: dma
+  smarthost: smtp.ccfe.ac.uk
