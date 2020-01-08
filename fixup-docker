@@ -6,6 +6,9 @@ target=$1
 
 fakeetc=/var/local
 
+# Docker envoronment
+rm -f "$target/.dockerenv"
+
 # Some files are overridden by docker, so put elsewhere by the build scripts
 for file in hostname hosts resolv.conf mtab; do
     if [ -e "$target$fakeetc/$file" -o -L "$target$fakeetc/$file" ]; then
@@ -28,7 +31,7 @@ rm -f "$target/etc/apt/apt.conf.d/51cache"
 rm -fr "$target/helpers"
 
 # .deb files (equivalent to apt-get clean)
-find "$target/var/cache/apt/archives" -type f \( -name lock -o print0 \) |
+find "$target/var/cache/apt/archives" -type f \( -name lock -o -print0 \) |
     xargs -0 rm -f
 
 # Files updated during build but not needed
