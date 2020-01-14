@@ -160,7 +160,19 @@ def make_readonly(g, cfg, opts=()):
         g.run('rmdir /var/lib/dhcpcd5')
         g.symlink('../../run/dhcpcd5','/var/lib/dhcpcd5')
         g.copy_file('e2fsck.conf',
-                    '/etc/')        
+                    '/etc/')
+        # Disable regular jobs, typically updates and backups
+        g.run('systemctl disable apt-daily.timer')
+        g.run('systemctl disable apt-daily-upgrade.timer')
+        jobs = (('dpkg','daily'),
+                ('man-db','daily'), ('man-db','weekly'),
+                ('passwd','daily'),
+                ('fake-hwclock','hourly'))
+        for job, freq in jobs:
+            script = '/etc/cron.%s/%s' % (freq, job)
+            g.run(['dpkg-divert','--add','--rename','--divert',
+                   script+'.disabled', script])
+    # Specifics for read-only techniques
     if readonly == 'root-ro':
         # Read-only root as per https://gist.github.com/kidapu/a03dd5bb8f4ac6a4c7e69c28bacde1d3
         g.copy_file('root-ro',
@@ -181,8 +193,6 @@ def make_readonly(g, cfg, opts=()):
         #for mtpt in ('boot','-'):
         #    d.copy_install('helpers/piro-mount.conf',
         #                   '/etc/systemd/system/%s.mount.d/' % mtpt)
-        g.run('systemctl disable apt-daily.timer')
-        g.run('systemctl disable apt-daily-upgrade.timer')
         #d.copy_install('helpers/50piro_xsessionerrors',
         #              '/etc/X11/Xsession.d')
         # Set /boot and / read-only
