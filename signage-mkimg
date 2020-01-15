@@ -1,0 +1,19 @@
+#!/bin/sh
+#=======================================================================
+#	Build image from base filesystem and other software layers
+#=======================================================================
+PROJDIR=`dirname "$0"`
+IMGFILE="$PROJDIR/signage.img"
+
+pwdistro create-image \
+    --root-size=1.2G \
+    --data-size=1G \
+    --usrlocal="$PROJDIR/usrlocal" \
+    --copy="$PROJDIR/ccfe-signage/export/":/home/pi/ccfe-signage/:1000:1000 \
+    --ldconfig \
+    "$PROJDIR/signage.fs" \
+    "$IMGFILE"
+
+if [ "$SUDO_USER" != "" ] ; then
+    chown "$SUDO_UID:$SUDO_GID" "$IMGFILE"
+fi

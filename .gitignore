@@ -6,3 +6,7 @@ __pycache__
 *.fs
 */Dockerfile
 */helpers
+usrlocal/
+piwall-subset/
+piwall-subset.tgz
+*.img

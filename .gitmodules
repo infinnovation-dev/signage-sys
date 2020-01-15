@@ -1,3 +1,9 @@
 [submodule "iisysgen"]
 	path = iisysgen
 	url = https://github.com/infinnovation-dev/iisysgen
+[submodule "ccfe-signage"]
+	path = ccfe-signage
+	url = git@git.ccfe.ac.uk:chah/ccfe-signage
+[submodule "ccfe-authen"]
+	path = ccfe-authen
+	url = git@git.ccfe.ac.uk:chah/ccfe-authen.git
