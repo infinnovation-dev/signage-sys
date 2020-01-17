@@ -76,6 +76,10 @@ def build(g, cfg):
                   '/etc/systemd/system/')
         g.symlink('/home/pi/ccfe-signage/signage-%s.service' % app,
                   '/etc/systemd/system/multi-user.target.wants/signage-%s.service' % app)
+    # Cron jobs
+    g.write_lines('/etc/cron.d/signage',
+                  '# Show newest presentation',
+                  '2 1 * * *  pi  /home/pi/bin/signage-nightly')
     # Stock pi-gen leaves partitions unassigned.  Firm them up now.
     g.run('sed -i -e s#ROOTDEV#/dev/mmcblk0p2# /boot/cmdline.txt') 
     g.run('sed -i -e s#BOOTDEV#/dev/mmcblk0p1# -e s#ROOTDEV#/dev/mmcblk0p2# /etc/fstab')
