@@ -2,6 +2,8 @@
 #	Set PIWALLINST to e.g. piwall-dev/stretch-install
 #=======================================================================
 
+IISYSGEN = PYTHONPATH=iisysgen python3 -m iisysgen.cmd
+
 PIWALL_BINS = pwimg pwcaption pwticker pwsnap
 PIWALL_LIBS = libpwdisp libpwmover libpwmsrv libpwtilemap libpwutil
 PIWALL_PY = defs __init__
@@ -48,7 +50,7 @@ signage.built:	signage/Dockerfile
 	touch $@
 
 signage/Dockerfile:	signage.py signage.yaml
-	PYTHONPATH=iisysgen python3 -m iisysgen build -c signage.yaml signage
+	$(IISYSGEN) generate -c signage.yaml signage
 
 signage.exported:	signage.built export-filetree fixup-docker
 	mkdir -p signage.fs
