@@ -1,7 +1,2 @@
-- Remove fakehw-clock (maybe just OK to disable hourly job)
-- noipv6 & nodhcp6 in dhcpcd.conf
-- tmpfiles.d split out smtp & dma ?
-- cec conjobs on K1
 - Clean:
-  - /etc/dhcpcd.uid
   - /usr/bin/qemu-arm-static

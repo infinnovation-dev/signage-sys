@@ -79,14 +79,15 @@ def build(g, cfg):
     # Cron jobs
     g.write_lines('/etc/cron.d/signage',
                   '# Show newest presentation',
+                  '0 * * * *  pi  /home/pi/bin/signage-hourly',
                   '2 1 * * *  pi  /home/pi/bin/signage-nightly')
     # Stock pi-gen leaves partitions unassigned.  Firm them up now.
     g.run('sed -i -e s#ROOTDEV#/dev/mmcblk0p2# /boot/cmdline.txt') 
     g.run('sed -i -e s#BOOTDEV#/dev/mmcblk0p1# -e s#ROOTDEV#/dev/mmcblk0p2# /etc/fstab')
     # Set UK timezone
     g.write_lines('/etc/timezone', 'Europe/London')
-    g.run('rm /etc/localtime')
-    g.run('dpkg-reconfigure -f noninteractive tzdata')
+    g.run('rm /etc/localtime'
+          ' && dpkg-reconfigure -f noninteractive tzdata')
     # Mail handling
     mail = cfg.get('mail',{})
     mta = mail.get('mta')
@@ -94,12 +95,18 @@ def build(g, cfg):
     #if smarthost == 'DHCP':
     #    # Get SMTP smarthost from DHCP
     #    g.run('echo "option smtp_server" >> /etc/dhcpcd.conf')
-    if smarthost and smarthost != 'DHCP':
-        if mta == 'dma':
-            g.run('echo "SMARTHOST %s" > /etc/dma/dma.conf' % smarthost)
+    if mta == 'dma':
+        # dragonfly mail agent config in /run (in case readonly OR dhcp)
+        g.symlink('../../run/dma.conf','/etc/dma/dma.conf')
+        if smarthost and smarthost != 'DHCP':
+            dmaconf = 'SMARTHOST %s\n' % smarthost
+            g.write_lines('/etc/tmpfiles.d/dma-conf.conf',
+                          #ty path        mode user grp age
+                          'w /run/dma.conf 644 root root - %s' %
+                          dmaconf.replace('\n','\\n'))
 
     user_auth(g, cfg)
-    make_readonly(g, cfg)
+    make_readonly(g, cfg, ['X'])
 
     data = cfg.get('data', {})
     dev = data.get('dev')
@@ -109,10 +116,15 @@ def build(g, cfg):
         g.append_lines('/etc/fstab',
                        '%-15s /data          ext4    defaults,noatime  0       2' % dev)
 
+    # Addition data for config.txt
     extra = cfg.get('config',[])
     if extra:
         g.append_lines('/boot/config.txt', *extra)
-
+    # Don't use IPv6 in dhcp
+    g.append_lines('/etc/dhcpcd.conf',
+                   'noipv6',
+                   'nodhcp6')
+    g.finish()
 
 def user_auth(g, cfg):
     """Set up authorization for logging on"""
@@ -139,16 +151,13 @@ def make_readonly(g, cfg, opts=()):
     if readonly:
         #--- Common for any technique
         # systemd tries to set this and complains if it can't
-        g.symlink('../proc/self/mounts','/etc/mtab')
+        g.symlink('../proc/self/mounts','/var/local/mtab')
         # similarly
         g.mkdir('/var/lib/systemd/coredump', mode='755')
         # /usr/lib/tmpfiles.d/sudo.conf tries to create timestamp dir etc.
         g.symlink('/dev/null','/etc/tmpfiles.d/sudo.conf')
         # resolver configuration moved to /run (N.B. temp location for docker)
         g.symlink('../run/resolv.conf','/var/local/resolv.conf')
-        # dragonfly mail agent moved to /run
-        if 'dma' in opts:
-            g.symlink('../../run/dma.conf','/etc/dma/dma.conf')
         g.copy_file('piro',
                     '/usr/bin/',
                     mode='755')
@@ -166,16 +175,21 @@ def make_readonly(g, cfg, opts=()):
         g.copy_file('e2fsck.conf',
                     '/etc/')
         # Disable regular jobs, typically updates and backups
-        g.run('systemctl disable apt-daily.timer')
-        g.run('systemctl disable apt-daily-upgrade.timer')
+        g.run(['systemctl','disable',
+               'apt-daily.timer',
+               'apt-daily-upgrade.timer'])
         jobs = (('dpkg','daily'),
                 ('man-db','daily'), ('man-db','weekly'),
-                ('passwd','daily'),
-                ('fake-hwclock','hourly'))
+                ('passwd','daily'))
+        #('fake-hwclock','hourly'))
         for job, freq in jobs:
             script = '/etc/cron.%s/%s' % (freq, job)
             g.run(['dpkg-divert','--add','--rename','--divert',
                    script+'.disabled', script])
+        # fake-hwclock is of no value if we cannot write the savefile
+        # Could we write to /data ?  Service scheduled before sysinit :-(
+        #g.uninstall('fake-hwclock')
+        g.run('apt-get purge -y fake-hwclock')
     # Specifics for read-only techniques
     if readonly == 'root-ro':
         # Read-only root as per https://gist.github.com/kidapu/a03dd5bb8f4ac6a4c7e69c28bacde1d3
@@ -186,22 +200,25 @@ def make_readonly(g, cfg, opts=()):
         g.run('mkinitramfs -o /boot/initrd /lib/modules/*v7*')
     elif readonly == 'piro':
         # Techniques as used in piwall/piro, adapted for systemd etc
-        for fs,size in (('/tmp','20%'),('/var/tmp','5%'),('/var/log','10%')):
-            g.append_lines('/etc/fstab',
-                           'tmpfs           %-15s tmpfs   noatime,nodev,noexec,size=%s,mode=1777 0 0' % (fs,size))
+        tmpfs = ['tmpfs           %-15s tmpfs   noatime,nodev,noexec,size=%s,mode=1777 0 0' % (fs,size)
+                 for fs,size in (('/tmp','20%'),
+                                 ('/var/tmp','5%'),
+                                 ('/var/log','10%'))]
+        g.append_lines('/etc/fstab', *tmpfs)
         g.copy_file('piro-tmpfiles.conf',
                     '/etc/tmpfiles.d')
-        if 'dma' in opts:
+        if cfg.get('mail',{}).get('mta') == 'dma':
             g.run('rm -fr /var/spool/dma')
             g.symlink('/run/dma-spool','/var/spool/dma')
+            g.write_lines('/etc/tmpfiles.d/dma-spool.conf',
+                          'd     /run/dma-spool         2770 root mail  -   -')
+        if 'xsession' in opts:
+            g.write_lines('/etc/X11/Xsession.d/50piro_xsessionerrors',
+                          'ERRFILE=/tmp/$USER-xsession-errors')
+        # Set /boot and / read-only
         #for mtpt in ('boot','-'):
         #    d.copy_install('helpers/piro-mount.conf',
         #                   '/etc/systemd/system/%s.mount.d/' % mtpt)
-        #d.copy_install('helpers/50piro_xsessionerrors',
-        #              '/etc/X11/Xsession.d')
-        # Set /boot and / read-only
         g.run('sed -i -e "/mmcblk0p[12]/s/defaults/defaults,ro/" /etc/fstab')
     elif readonly is not None:
         raise ValueError('Unknown readonly scheme %r' % readonly)
-
-    g.finish()
