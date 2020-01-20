@@ -1,8 +1,5 @@
 - Remove fakehw-clock (maybe just OK to disable hourly job)
-- config.txt additions not being done
 - noipv6 & nodhcp6 in dhcpcd.conf
-- /data in fstab
-- basic /etc/hosts (localhost 127.0.0.1)
 - tmpfiles.d split out smtp & dma ?
 - cec conjobs on K1
 - Clean:
