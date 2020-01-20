@@ -11,8 +11,10 @@ PIWALL_PY = defs __init__
 PWSRCBIN = $(addprefix $(PIWALLINST)/bin/,$(PIWALL_BINS))
 PWSRCLIB = $(foreach lib,$(PIWALL_LIBS),$(wildcard $(PIWALLINST)/lib/$(lib).so*))
 PWSRCPY = $(foreach py,$(PIWALL_PY),$(PIWALLINST)/lib/python2.7/dist-packages/piwall/$(py).py)
+PWSRCSHARE = $(PIWALLINST)/share/piwall
 
 signage.img:	signage.exported usrlocal.built ccfe-signage.exported
+	rm -f $@
 	sudo ./signage-mkimg
 
 ccfe-signage.exported:	FORCE
@@ -39,6 +41,8 @@ piwall-subset:	FORCE
 	rsync -av $(PWSRCLIB) $@/lib/
 	mkdir -p $@/lib/python3.5/dist-packages/piwall/
 	rsync -av $(PWSRCPY) $@/lib/python3.5/dist-packages/piwall/
+	mkdir -p $@/share/piwall/
+	rsync -av $(PWSRCSHARE)/ $@/share/piwall/
 endif
 
 # piwall-subset.tgz to be imported manually
