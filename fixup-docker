@@ -30,6 +30,9 @@ rm -f "$target/etc/apt/apt.conf.d/51cache"
 # Helper files from iisysgen
 rm -fr "$target/helpers"
 
+# qemu for foreign architecture
+rm -f "$target/usr/bin/qemu-arm-static"
+
 # .deb files (equivalent to apt-get clean)
 find "$target/var/cache/apt/archives" -type f \( -name lock -o -print0 \) |
     xargs -0 rm -f

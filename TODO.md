@@ -1,2 +1,0 @@
-- Clean:
-  - /usr/bin/qemu-arm-static
